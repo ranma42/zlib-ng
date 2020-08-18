@@ -45,7 +45,7 @@ ZLIB_INTERNAL Pos QUICK_INSERT_STRING(deflate_state *const s, const uint32_t str
     hm = h & s->hash_mask;
 
     head = s->head[hm];
-    if (head != str) {
+    if (LIKELY(head != str)) {
         s->prev[str & s->w_mask] = head;
         s->head[hm] = str;
     }
@@ -61,7 +61,7 @@ ZLIB_INTERNAL Pos QUICK_INSERT_STRING(deflate_state *const s, const uint32_t str
  *    (except for the last MIN_MATCH-1 bytes of the input file).
  */
 ZLIB_INTERNAL Pos INSERT_STRING(deflate_state *const s, const uint32_t str, uint32_t count) {
-    Pos idx, ret;
+    Pos head, idx, ret=0;
     uint8_t *strstart, *strend;
 
     if (UNLIKELY(count == 0)) {
@@ -71,7 +71,7 @@ ZLIB_INTERNAL Pos INSERT_STRING(deflate_state *const s, const uint32_t str, uint
     strstart = s->window + str;
     strend = strstart + count - 1; /* last position */
 
-    for (ret = 0, idx = str; strstart <= strend; idx++, strstart++) {
+    for (idx = str; strstart <= strend; idx++, strstart++) {
         uint32_t val, hm, h = 0;
 
 #ifdef UNALIGNED_OK
@@ -82,19 +82,21 @@ ZLIB_INTERNAL Pos INSERT_STRING(deflate_state *const s, const uint32_t str, uint
         val |= ((uint32_t)(strstart[2]) << 16);
         val |= ((uint32_t)(strstart[3]) << 24);
 #endif
-
         UPDATE_HASH(s, h, val);
         hm = h & s->hash_mask;
 
-        Pos head = s->head[hm];
-        if (head != idx) {
+        head = s->head[hm];
+        if (LIKELY(head != idx)) {
             s->prev[idx & s->w_mask] = head;
             s->head[hm] = idx;
-            if (strstart == strend)
-                ret = head;
-        } else if (strstart == strend) {
-            ret = idx;
         }
+    }
+
+    if (strstart == strend) {
+        if (head != idx)
+            ret = head;
+        else
+            ret = idx;
     }
     return ret;
 }
